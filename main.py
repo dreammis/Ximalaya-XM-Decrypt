@@ -9,6 +9,7 @@ import mutagen
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad
 from mutagen.easyid3 import ID3
+from tqdm import tqdm
 from wasmer import Store, Module, Instance, Uint8Array, Int32Array, engine
 from wasmer_compiler_cranelift import Compiler
 
@@ -75,9 +76,18 @@ def get_printable_bytes(x: bytes):
 def xm_decrypt(raw_data):
     # load xm encryptor
     # print("loading xm encryptor")
+    # 当前文件的目录
+    current_dir = pathlib.Path(__file__).parent
+
+    # 构造 xm_encryptor.wasm 文件的绝对路径
+    wasm_path = current_dir / "xm_encryptor.wasm"
+
+    # 确保文件存在
+    if not wasm_path.exists():
+        raise FileNotFoundError(f"No such file or directory: '{wasm_path}'")
     xm_encryptor = Instance(Module(
         Store(engine.Universal(Compiler)),
-        pathlib.Path("./xm_encryptor.wasm").read_bytes()
+        wasm_path.read_bytes()
     ))
     # decode id3
     xm_info = get_xm_info(raw_data)
@@ -129,6 +139,15 @@ def xm_decrypt(raw_data):
     return xm_info, final_data
 
 
+def check_file(file_path: str):
+    # 检查文件是否存在
+    file_path = pathlib.Path(file_path)
+    if file_path.exists() and file_path.stat().st_size > 0:
+        return False
+    else:
+        return True
+
+
 def find_ext(data):
     exts = ["m4a", "mp3", "flac", "wav"]
     value = magic.from_buffer(data).lower()
@@ -139,23 +158,22 @@ def find_ext(data):
 
 
 def decrypt_xm_file(from_file, output_path='./output'):
-    print(f"正在解密{from_file}")
     data = read_file(from_file)
     info, audio_data = xm_decrypt(data)
-    output = f"{output_path}/{replace_invalid_chars(info.album)}/{replace_invalid_chars(info.title)}.{find_ext(audio_data[:0xff])}"
-    if not os.path.exists(f"{output_path}/{replace_invalid_chars(info.album)}"):
-        os.makedirs(f"{output_path}/{replace_invalid_chars(info.album)}")
+    output = f"{output_path}/{replace_invalid_chars(info.title)}.{find_ext(audio_data[:0xff])}"
+    if not check_file(output):
+        return
+    if not os.path.exists(f"{output_path}"):
+        os.makedirs(f"{output_path}")
     buffer = io.BytesIO(audio_data)
     tags = mutagen.File(buffer, easy=True)
     tags["title"] = info.title
     tags["album"] = info.album
     tags["artist"] = info.artist
-    print(tags.pprint())
     tags.save(buffer)
     with open(output, "wb") as f:
         buffer.seek(0)
         f.write(buffer.read())
-    print(f"解密成功，文件保存至{output}！")
 
 
 def replace_invalid_chars(name):
