@@ -140,12 +140,12 @@ def xm_decrypt(raw_data):
 
 
 def check_file(file_path: str):
-    # 检查文件是否存在
+    # 检查文件是否存在 存在为true
     file_path = pathlib.Path(file_path)
     if file_path.exists() and file_path.stat().st_size > 0:
-        return False
-    else:
         return True
+    else:
+        return False
 
 
 def find_ext(data):
@@ -161,7 +161,7 @@ def decrypt_xm_file(from_file, output_path='./output'):
     data = read_file(from_file)
     info, audio_data = xm_decrypt(data)
     output = f"{output_path}/{replace_invalid_chars(info.title)}.{find_ext(audio_data[:0xff])}"
-    if not check_file(output):
+    if check_file(output):
         return
     if not os.path.exists(f"{output_path}"):
         os.makedirs(f"{output_path}")
